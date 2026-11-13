@@ -26,7 +26,13 @@ int main(void) {
     knit_charts_load(NULL);
     KnitPatternLibrary* library = [KnitPatternLibrary new];
     [library openWithApply:apply save:save];
-    assert(library.names.count==9 && library.preview.image);
+    assert(library.names.count==56 && library.preview.image);
+    library.filter.selectedSegment=1;
+    [library filterChanged:nil];
+    assert(library.names.count==56 && [library.names containsObject:@"zigzag"]);
+    [library selectName:@"atelier-messages"]; // Non-square upstream chart with its original renderer.
+    assert(library.preview.image && library.applyButton.enabled && !library.gridButton.enabled);
+    [library selectName:@"zigzag"];
     [library selectName:@"festival-daisy"];
     uint32_t original=g_charts[knit_chart_index("festival-daisy")].base_color;
     library.nameField.stringValue=@"暮色雏菊";
@@ -119,17 +125,25 @@ int main(void) {
     [editor.removeColor performClick:nil];
     assert(editor.palette.count==swatchCount && editor->pixels[0]==0xffcc8844);
     [editor.paletteDefaults removePersistentDomainForName:paletteSuite];
-    assert([library adoptGrid:editor blank:NO]);
+    NSData* named = [library editedDocument:editor title:@"桂花" error:nil];
+    assert(named && ![library editedDocument:editor title:@"  " error:nil]);
     assert(g_charts[knit_chart_index("festival-daisy")].px[0]==originalStitch);
     memset(editor->pixels,0,sizeof editor->pixels);
-    assert(![library adoptGrid:editor blank:YES]);
-    [cell performClick:nil]; assert([library adoptGrid:editor blank:YES]);
-    assert(library.dirty && !library.selectedName && library.removeButton.hidden);
-    struct knit_chart created={0};
-    assert(knit_pattern_decode([library patternData],&created,nil) && created.px[0]==0xffcc8844);
-    free(created.px);
-    [library applyPattern:nil];
-    assert(saves==4 && g_charts[g_chart_active].packaged && !g_knit_pattern_by_app);
+    assert(![library editedDocument:editor title:@"桂花" error:nil]);
+    [cell performClick:nil];
+    assert([library installDocument:[library editedDocument:editor title:@"桂花" error:nil] apply:YES]);
+    assert(saves==4 && g_charts[g_chart_active].packaged && !strcmp(g_charts[g_chart_active].title,"桂花"));
+    NSString* savedName = library.selectedName;
+    NSUInteger savedCount = library.names.count;
+    NSData* renamed = [library editedDocument:editor title:@"桂花新版" error:nil];
+    assert(![library writeDocument:renamed replacing:@"festival-daisy" error:nil]);
+    assert(![library writeDocument:[NSData data] replacing:savedName error:nil]);
+    assert([[library writeDocument:renamed replacing:savedName error:nil] isEqual:savedName]);
+    assert([library showSavedPattern:savedName apply:NO]);
+    assert(library.names.count==savedCount && [library.nameField.stringValue isEqual:@"桂花新版"]);
+    assert(!strcmp(g_charts[g_chart_active].name,savedName.UTF8String));
+    assert([library installDocument:named apply:NO]);
+    assert(library.names.count==savedCount+1 && ![library.selectedName isEqual:savedName]);
     // Check the minimum window: both the gallery and inspector remain scrollable.
     [library.window setContentSize:NSMakeSize(920,580)]; [library.window.contentView layoutSubtreeIfNeeded];
     int scrollViews=0; for(NSView* view in library.window.contentView.subviews) if([view isKindOfClass:NSScrollView.class]) {
@@ -137,7 +151,6 @@ int main(void) {
     }
     assert(scrollViews==2);
     // Capture a normal gallery view without test documents or unsaved edits.
-    assert([NSFileManager.defaultManager removeItemAtPath:@(pattern_directory) error:nil]);
     knit_charts_load(NULL); knit_flush_cache();
     library.currentFilter=library.filter.selectedSegment=0; [library.images removeAllObjects];
     [library refreshNames]; [library selectName:@"festival-daisy"];
@@ -184,9 +197,21 @@ int main(void) {
           assert(!panel.visible && !panel.accessoryView && [sheet.palette containsObject:@0xff123abc]);
           [sheet.paletteDefaults removePersistentDomainForName:paletteSuite];
           NSButton* done = sheet.view.subviews.lastObject;
+          NSTimer* naming = [NSTimer timerWithTimeInterval:.3 repeats:NO block:^(NSTimer* timer) {
+            NSWindow* modal = NSApp.modalWindow;
+            assert(modal && modal!=sheet.view.window);
+            NSText* fieldEditor = (NSText*)modal.firstResponder;
+            assert([fieldEditor.string isEqual:@"雏菊 副本"]);
+            [fieldEditor setString:@"窗口测试图案"];
+            [modal makeFirstResponder:nil];
+            [NSApp stopModalWithCode:NSAlertFirstButtonReturn];
+          }];
+          [NSRunLoop.mainRunLoop addTimer:naming forMode:NSModalPanelRunLoopMode];
           [done performClick:nil];
-          assert(library.dirty && [library.selectedName isEqualToString:@"festival-daisy"]);
+          assert(!library.dirty && [library.nameField.stringValue isEqualToString:@"窗口测试图案"]);
+          assert(library.currentFilter==2 && g_charts[knit_chart_index(library.selectedName.UTF8String)].packaged);
         }
+        assert([NSFileManager.defaultManager removeItemAtPath:@(pattern_directory) error:nil]);
         [library.window orderOut:nil];
         puts("PASS: native cards; live edits; save-copy/apply; duplicate import; reopen; scrollable layout; presets and spacing step; trash/fallback; grid edits, undo/redo, real color panel confirmation, reusing pattern colors, palette management, preview width; built-ins unchanged");
         exit(0);

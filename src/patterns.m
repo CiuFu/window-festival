@@ -144,7 +144,7 @@ NSString* knit_pattern_install(NSData* data, const char* directory, NSError** er
   return installed ? name : nil;
 }
 
-NSURL* knit_pattern_trash(const char* directory, NSString* name, NSError** error) {
+static NSURL* pattern_existing_file(const char* directory, NSString* name, NSError** error) {
   if (!directory || !*directory || !name.length || [name hasPrefix:@"."] ||
       [name rangeOfString:@"/"].location != NSNotFound) {
     pattern_error(error, @"图案包路径无效。"); return nil;
@@ -157,6 +157,22 @@ NSURL* knit_pattern_trash(const char* directory, NSString* name, NSError** error
   if (!regular.boolValue || symlink.boolValue) {
     pattern_error(error, @"只能移除本地图案包文件。"); return nil;
   }
+  return file;
+}
+
+BOOL knit_pattern_replace(NSData* data, const char* directory, NSString* name, NSError** error) {
+  struct knit_chart verified = {0};
+  if (!knit_pattern_decode(data, &verified, error)) return NO;
+  free(verified.px);
+  NSURL* file = pattern_existing_file(directory, name, error);
+  if (!file || !knit_pattern_decode(knit_pattern_read(file, error), &verified, error)) return NO;
+  free(verified.px);
+  return [data writeToURL:file options:NSDataWritingAtomic error:error];
+}
+
+NSURL* knit_pattern_trash(const char* directory, NSString* name, NSError** error) {
+  NSURL* file = pattern_existing_file(directory, name, error);
+  if (!file) return nil;
   NSURL* trashed = nil;
   return [NSFileManager.defaultManager trashItemAtURL:file resultingItemURL:&trashed error:error] ? trashed : nil;
 }

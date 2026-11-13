@@ -55,6 +55,11 @@ int main(int argc, char** argv) {
     NSString* oversized=[@(temp) stringByAppendingPathComponent:@"huge.knit.json"];
     assert([[NSMutableData dataWithLength:65537] writeToFile:oversized atomically:YES]);
     assert(!knit_pattern_read([NSURL fileURLWithPath:oversized],nil));
+    assert(!knit_pattern_replace(example,temp,@"linked",nil));
+    assert(!knit_pattern_replace(example,temp,@"broken",nil));
+    assert(!knit_pattern_replace(example,temp,@"../outside",nil));
+    assert(!knit_pattern_replace([NSData data],temp,first,nil));
+    assert([[NSData dataWithContentsOfFile:firstPath] isEqual:example]);
     assert(knit_charts_load(temp)==58);
     assert(g_charts[knit_chart_index("festival-daisy")].base_color!=daisy.base_color);
     assert(knit_pattern_select(first.UTF8String));

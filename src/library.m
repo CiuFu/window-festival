@@ -12,7 +12,8 @@ static NSString* library_title(const struct knit_chart* chart) {
   NSDictionary* names = @{@"festival-plum": @"梅花", @"festival-lantern": @"灯笼", @"festival-spring": @"春",
     @"festival-daisy": @"雏菊", @"festival-bamboo": @"竹叶", @"festival-tulip": @"郁金香",
     @"festival-cloud": @"祥云", @"festival-diamond": @"菱花", @"festival-persimmon": @"柿子"};
-  return names[@(chart->name)] ?: @(chart->name);
+  NSString* name = @(chart->name);
+  return names[name] ?: [[name stringByReplacingOccurrencesOfString:@"-" withString:@" "] capitalizedString];
 }
 static NSColor* library_color(uint32_t c) {
   return [NSColor colorWithSRGBRed:((c>>16)&255)/255.0 green:((c>>8)&255)/255.0 blue:(c&255)/255.0 alpha:1];
@@ -32,7 +33,11 @@ static NSImage* library_image(const struct knit_chart* chart, float width) {
   CGColorSpaceRelease(colors); if (!c) return nil;
   CGContextScaleCTM(c,2,2);
   CGRect win = CGRectMake(width+8,width+8,300-2*(width+8),190-2*(width+8));
-  knit_draw_pattern_preview(c,win,9,width,chart);
+  if (chart->upright) {
+    knit_draw_pattern_preview(c,win,9,width,chart);
+  } else {
+    knit_draw(c,win,9,width,0xff638575,knit_chart_index(chart->name),0,0);
+  }
   CGPathRef path = CGPathCreateWithRoundedRect(win,9,9,NULL);
   CGContextSetRGBFillColor(c,.98,.975,.96,1); CGContextAddPath(c,path); CGContextFillPath(c); CFRelease(path);
   for (int i=0;i<3;i++) {
@@ -601,7 +606,7 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
     library_choice(self.width,[NSString stringWithFormat:@"%s · %g pt",knit_width_presets[i].name,knit_width_presets[i].value],knit_width_presets[i].value);
   self.width.target = self; self.width.action = @selector(configurationChanged:);
   [self.width setAccessibilityLabel:@"边框宽度"]; [panel addSubview:self.width];
-  NSTextField* note = [NSTextField wrappingLabelWithString:@"修改后保存为新副本，原图案会保留。\n点击应用后才会更改桌面边框。"];
+  NSTextField* note = [NSTextField wrappingLabelWithString:@"上游图案可预览并按原样应用。\n编辑自制图案时可覆盖或另存。"];
   note.frame = NSMakeRect(0,502,252,40); note.font = [NSFont systemFontOfSize:11]; note.textColor = NSColor.secondaryLabelColor; [panel addSubview:note];
   self.applyButton = [NSButton buttonWithTitle:@"应用此图案" target:self action:@selector(applyPattern:)];
   self.applyButton.frame = NSMakeRect(0,552,252,32); self.applyButton.bezelStyle = NSBezelStyleRounded;
@@ -639,13 +644,16 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
 }
 - (void)refreshNames {
   NSMutableArray* names = [NSMutableArray array];
+  NSMutableArray* upstream = [NSMutableArray array];
   for (int i=0;i<g_chart_count;i++) {
     struct knit_chart* c = &g_charts[i];
-    if (!c->upright || c->generated || c->w != c->h || c->h < 4 || c->h > 14) continue;
+    if (!c->px || c->generated) continue;
+    if (c->custom && !c->packaged && !c->upright) continue;
     if (self.currentFilter == 1 && c->packaged) continue;
     if (self.currentFilter == 2 && !c->packaged) continue;
-    [names addObject:@(c->name)];
+    [(c->upright ? names : upstream) addObject:@(c->name)];
   }
+  [names addObjectsFromArray:upstream];
   self.names = names; [self.collection reloadData];
   self.status.stringValue = names.count ? [NSString stringWithFormat:@"%lu 个图案 · 图案包可离线导入、导出与分享", (unsigned long)names.count]
       : @"这里还没有图案。可以导入图案包，或从内置图案保存一个自己的配色。";
@@ -661,9 +669,9 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
   NSString* name = self.names[path.item]; int index = knit_chart_index(name.UTF8String);
   if (index < 0) return item;
   struct knit_chart* c = &g_charts[index];
-  if (!self.images[name]) self.images[name] = library_image(c,c->preferred_width ?: 28);
+  if (!self.images[name]) self.images[name] = library_image(c,c->preferred_width ?: (c->upright ? 28 : 12));
   item.imageView.image = self.images[name]; item.textField.stringValue = library_title(c);
-  item.kind.stringValue = c->packaged ? @"我的图案" : @"内置 · 针织";
+  item.kind.stringValue = c->packaged ? @"我的图案" : c->upright ? @"内置 · 节日图案" : @"内置 · Window Sweaters";
   [item.view setAccessibilityLabel:[NSString stringWithFormat:@"%@，%@",item.textField.stringValue,item.kind.stringValue]];
   return item;
 }
@@ -696,12 +704,18 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
       : [NSSet setWithObject:[NSIndexPath indexPathForItem:item inSection:0]];
 }
 - (void)loadDraftControls {
-  BOOL enabled = _draft.px != NULL;
-  self.applyButton.enabled = self.exportButton.enabled = self.gridButton.enabled = enabled;
+  BOOL hasPattern = _draft.px != NULL;
+  BOOL enabled = hasPattern && _draft.upright && _draft.w == _draft.h && _draft.h >= 4 && _draft.h <= 14;
+  self.applyButton.enabled = hasPattern;
+  self.exportButton.enabled = self.gridButton.enabled = enabled;
   self.resetButton.enabled = enabled && self.selectedName != nil;
   self.nameField.enabled = self.base.enabled = self.spacing.enabled = self.spacingStep.enabled = self.width.enabled = enabled;
   for (NSColorWell* well in self.yarns) well.hidden = YES;
-  if (!enabled) { self.preview.image = nil; return; }
+  if (!enabled) {
+    self.preview.image = hasPattern ? library_image(&_draft,12) : nil;
+    self.applyButton.title = @"应用此图案";
+    return;
+  }
   self.originalPixels = [NSData dataWithBytes:_draft.px length:(size_t)_draft.w*_draft.h*sizeof(uint32_t)];
   NSMutableArray* colors = [NSMutableArray array];
   for (int i=0;i<_draft.w*_draft.h;i++) if ((_draft.px[i]>>24)>=128 && ![colors containsObject:@(_draft.px[i] | 0xff000000u)]) [colors addObject:@(_draft.px[i] | 0xff000000u)];
@@ -736,7 +750,7 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
     _draft.px[i] = (original[i]>>24)<128 ? 0 : color < self.yarns.count ? library_hex(self.yarns[color].color) : original[i];
   }
   self.preview.image = library_image(&_draft,_draft.preferred_width);
-  self.applyButton.title = self.dirty ? @"保存副本并应用" : @"应用此图案";
+  self.applyButton.title = self.dirty ? @"保存并应用…" : @"应用此图案";
 }
 - (NSData*)patternData {
   NSString* title = self.nameField.stringValue;
@@ -746,33 +760,87 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
   [self updateDraft]; NSError* error = nil; NSData* data = knit_pattern_encode(&_draft,&error);
   if (!data) [self showError:error]; return data;
 }
-- (BOOL)installDocument:(NSData*)data apply:(BOOL)apply {
-  if (g_chart_count >= KNIT_CHART_MAX) {
-    [self showError:[NSError errorWithDomain:@"WindowFestival.Pattern" code:1 userInfo:@{NSLocalizedDescriptionKey:@"图案数量已达上限，请先重启应用释放自动取色缓存，或整理自定义图案目录。"}]]; return NO;
+- (NSString*)writeDocument:(NSData*)data replacing:(NSString*)existing error:(NSError**)error {
+  if (existing) {
+    int index = knit_chart_index(existing.UTF8String);
+    if (index < 0 || !g_charts[index].packaged) {
+      if (error) *error = [NSError errorWithDomain:@"WindowFestival.Pattern" code:1
+          userInfo:@{NSLocalizedDescriptionKey:@"原图案已不可用，请另存为新图案。"}];
+      return nil;
+    }
+    return knit_pattern_replace(data,knit_charts_dir(),existing,error) ? existing : nil;
   }
-  NSError* error = nil; NSString* name = knit_pattern_install(data,knit_charts_dir(),&error);
-  if (!name) { [self showError:error]; return NO; }
+  if (g_chart_count >= KNIT_CHART_MAX) {
+    if (error) *error = [NSError errorWithDomain:@"WindowFestival.Pattern" code:1
+        userInfo:@{NSLocalizedDescriptionKey:@"图案数量已达上限，请先整理「我的图案」。"}];
+    return nil;
+  }
+  return knit_pattern_install(data,knit_charts_dir(),error);
+}
+- (BOOL)showSavedPattern:(NSString*)name apply:(BOOL)apply {
   _apply("charts=reload");
   if (knit_chart_index(name.UTF8String) < 0) {
-    [self showError:[NSError errorWithDomain:@"WindowFestival.Pattern" code:1 userInfo:@{NSLocalizedDescriptionKey:@"文件已保存，但未能加载。原来的图案选择保持不变。"}]]; return NO;
+    [self showError:[NSError errorWithDomain:@"WindowFestival.Pattern" code:1
+        userInfo:@{NSLocalizedDescriptionKey:@"图案已写入磁盘，但未能重新加载。"}]];
+    return NO;
   }
   self.dirty = NO; self.currentFilter = self.filter.selectedSegment = 2; [self.images removeAllObjects];
   [self refreshNames]; [self selectName:name];
   if (apply) [self applyPattern:nil];
+  else self.status.stringValue = [NSString stringWithFormat:@"已保存「%@」 · 可从菜单栏 Pattern → Custom Patterns 切换",self.nameField.stringValue];
   return YES;
+}
+- (BOOL)installDocument:(NSData*)data apply:(BOOL)apply {
+  NSError* error = nil;
+  NSString* name = [self writeDocument:data replacing:nil error:&error];
+  if (!name) { [self showError:error]; return NO; }
+  return [self showSavedPattern:name apply:apply];
+}
+- (NSModalResponse)askToSave:(NSTextField*)nameField existing:(NSString*)existing {
+  NSAlert* alert = [NSAlert new];
+  alert.messageText = existing ? @"保存图案修改" : @"为图案命名";
+  alert.informativeText = existing ? @"覆盖保存会更新原图案。另存为会在「我的图案」中创建一份副本。" : @"保存后可在「我的图案」和菜单栏的 Custom Patterns 中找到它。";
+  [alert addButtonWithTitle:existing ? @"另存为" : @"保存图案"];
+  if (existing) [alert addButtonWithTitle:@"覆盖保存"];
+  NSButton* cancel = [alert addButtonWithTitle:@"取消"];
+  cancel.keyEquivalent = @"\e";
+  alert.accessoryView = nameField;
+  alert.window.initialFirstResponder = nameField;
+  return [alert runModal];
 }
 - (void)applyPattern:(id)sender {
   if (!_draft.px) return;
-  if (self.dirty) { NSData* data = [self patternData]; if (data) [self installDocument:data apply:YES]; return; }
+  if (self.dirty) {
+    if (!_draft.packaged) {
+      NSData* data = [self patternData];
+      if (data) [self installDocument:data apply:YES];
+      return;
+    }
+    NSTextField* field = [[NSTextField alloc] initWithFrame:NSMakeRect(0,0,290,24)];
+    field.stringValue = self.nameField.stringValue;
+    NSModalResponse response = [self askToSave:field existing:self.selectedName];
+    if (response != NSAlertFirstButtonReturn && response != NSAlertSecondButtonReturn) return;
+    self.nameField.stringValue = field.stringValue;
+    NSData* data = [self patternData];
+    if (!data) return;
+    NSError* error = nil;
+    NSString* name = [self writeDocument:data replacing:response == NSAlertSecondButtonReturn ? self.selectedName : nil error:&error];
+    if (name) [self showSavedPattern:name apply:YES]; else [self showError:error];
+    return;
+  }
   int chart = knit_chart_index(self.selectedName.UTF8String);
   if (chart < 0) { [self refreshNames]; [self selectName:self.names.firstObject]; return; }
-  _apply([[NSString stringWithFormat:@"width=%g",_draft.preferred_width] UTF8String]);
+  if (g_charts[chart].upright) {
+    _apply([[NSString stringWithFormat:@"width=%g",_draft.preferred_width] UTF8String]);
+  } else if (g_knit.rows < MAX(6,g_charts[chart].h)) {
+    _apply([[NSString stringWithFormat:@"gauge=%d",MAX(6,g_charts[chart].h)] UTF8String]);
+  }
   _apply([[NSString stringWithFormat:@"chart=%@",self.selectedName] UTF8String]); _save();
-  self.status.stringValue = [NSString stringWithFormat:@"已应用「%@」 · %g pt", self.nameField.stringValue,_draft.preferred_width];
+  self.status.stringValue = [NSString stringWithFormat:@"已应用「%@」",self.nameField.stringValue];
 }
 - (void)showGuide:(id)sender {
   NSAlert* alert = [NSAlert new]; alert.messageText = @"从一格针脚开始";
-  alert.informativeText = @"点「新建图案」从 12×12 的空白网格开始，也可以选一张内置卡片，再点「改针脚」。点右侧底色色块，选好后点「应用底色」。点左侧画笔色块，选好后点「使用画笔色」，或直接点图案用色、常用色。用图案用色里的底色色块可以补回空白针脚。要收藏新的线色，点「添加颜色」并在颜色面板确认。\n\n完成后可调整名称、配色、间距和宽度，再保存并应用，或导出 .knit.json 发给别人。收到同格式的包，用「导入图案包」加入我的图案。\n\n如果想用文本编辑器制作，可以先导出一份样例：grid 每行代表一行针脚，点号是底色，a、b、c…按顺序对应 palette 的线色。";
+  alert.informativeText = @"点「新建图案」从 12×12 的空白网格开始，也可以选一款节日图案，再点「改针脚」。上游图案可以直接预览和应用。点右侧底色色块，选好后点「应用底色」。点左侧画笔色块，选好后点「使用画笔色」，或直接点图案用色、常用色。用图案用色里的底色色块可以补回空白针脚。要收藏新的线色，点「添加颜色」并在颜色面板确认。\n\n点「完成针脚」填写名称并保存。编辑「我的图案」可选择覆盖或另存。保存后可应用图案、调整间距和宽度，或导出 .knit.json 发给别人。收到同格式的包，用「导入图案包」加入我的图案。\n\n如果想用文本编辑器制作，可以先导出一份样例：grid 每行代表一行针脚，点号是底色，a、b、c…按顺序对应 palette 的线色。";
   [alert beginSheetModalForWindow:self.window completionHandler:nil];
 }
 - (void)newPattern:(id)sender {
@@ -780,7 +848,7 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
   [self openGrid:YES];
 }
 - (void)editPattern:(id)sender {
-  if (!_draft.px) return;
+  if (!self.gridButton.enabled) return;
   [self updateDraft]; [self openGrid:NO];
 }
 - (void)openGrid:(BOOL)blank {
@@ -799,25 +867,33 @@ static NSString* const grid_palette_key = @"gridEditorPalette";
 - (void)acceptGrid:(NSButton*)sender {
   KnitGridEditor* editor = (KnitGridEditor*)self.window.contentViewController.presentedViewControllers.lastObject;
   if (![editor isKindOfClass:KnitGridEditor.class]) return;
-  if ([self adoptGrid:editor blank:[sender.identifier isEqualToString:@"new"]])
-    [editor cancelGrid:nil];
-}
-- (BOOL)adoptGrid:(KnitGridEditor*)editor blank:(BOOL)blank {
-  struct knit_chart chart = editor->pattern;
-  // Reuse the same grid and palette checks as export, independently of the name field.
-  snprintf(chart.title,sizeof chart.title,"Draft");
+  BOOL blank = [sender.identifier isEqualToString:@"new"];
+  NSString* existing = !blank && _draft.packaged ? self.selectedName : nil;
+  NSTextField* field = [[NSTextField alloc] initWithFrame:NSMakeRect(0,0,290,24)];
+  field.placeholderString = @"图案名称";
+  if (!blank) field.stringValue = existing ? self.nameField.stringValue
+      : [self.nameField.stringValue stringByAppendingString:@" 副本"];
+  NSModalResponse response = [self askToSave:field existing:existing];
+  if (response != NSAlertFirstButtonReturn && !(existing && response == NSAlertSecondButtonReturn)) return;
   NSError* error = nil;
-  if (!knit_pattern_encode(&chart,&error)) { editor.hint.stringValue = error.localizedDescription; return NO; }
-  size_t size = (size_t)chart.w*chart.h*sizeof(uint32_t);
-  uint32_t* copy = malloc(size);
-  if (!copy) { editor.hint.stringValue = @"内存不足，无法保存草稿。"; return NO; }
-  memcpy(copy,chart.px,size);
-  if (blank) {
-    [self selectName:nil]; self.nameField.stringValue = @"我的针织图案";
+  NSData* data = [self editedDocument:editor title:field.stringValue error:&error];
+  NSString* name = data ? [self writeDocument:data replacing:response == NSAlertSecondButtonReturn ? existing : nil error:&error] : nil;
+  if (!name) {
+    editor.hint.stringValue = error.localizedDescription ?: @"无法保存图案。";
+    return;
   }
-  free(_draft.px); _draft = chart; _draft.px = copy;
-  self.dirty = YES; [self loadDraftControls];
-  return YES;
+  [editor cancelGrid:nil];
+  [self showSavedPattern:name apply:NO];
+}
+- (NSData*)editedDocument:(KnitGridEditor*)editor title:(NSString*)title error:(NSError**)error {
+  struct knit_chart chart = editor->pattern;
+  if ([title lengthOfBytesUsingEncoding:NSUTF8StringEncoding] >= sizeof chart.title) {
+    if (error) *error = [NSError errorWithDomain:@"WindowFestival.Pattern" code:1
+        userInfo:@{NSLocalizedDescriptionKey:@"图案名称过长，请缩短后再保存。"}];
+    return nil;
+  }
+  snprintf(chart.title,sizeof chart.title,"%s",title.UTF8String);
+  return knit_pattern_encode(&chart,error);
 }
 - (void)removePattern:(id)sender {
   int index = knit_chart_index(self.selectedName.UTF8String);

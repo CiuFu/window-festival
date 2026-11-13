@@ -11,5 +11,6 @@ BOOL knit_pattern_decode(NSData* data, struct knit_chart* output, NSError** erro
 NSData* knit_pattern_encode(const struct knit_chart* chart, NSError** error);
 // Always installs a new private copy; never overwrites a pattern or a built-in.
 NSString* knit_pattern_install(NSData* data, const char* directory, NSError** error);
+BOOL knit_pattern_replace(NSData* data, const char* directory, NSString* name, NSError** error);
 NSURL* knit_pattern_trash(const char* directory, NSString* name, NSError** error);
 #endif
