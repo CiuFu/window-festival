@@ -1,4 +1,6 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #include "border.h"
+#include "misc/chart.h"
 #include "misc/autoyarn.h"
 #include "hashtable.h"
 #include "events.h"
@@ -19,8 +21,8 @@
 #define HELP_OPT_LONG "--help"
 #define HELP_OPT_SHRT "-h"
 
-#define MAJOR 1
-#define MINOR 5
+#define MAJOR 0
+#define MINOR 1
 #define PATCH 0
 
 // Resolved via dlsym because of availability
@@ -206,13 +208,13 @@ void load_symbols() {
 int main(int argc, char** argv) {
   if (argc > 1 && ((strcmp(argv[1], VERSION_OPT_LONG) == 0)
                    || (strcmp(argv[1], VERSION_OPT_SHRT) == 0))) {
-    fprintf(stdout, "Window Sweaters %d.%d.%d\n", MAJOR, MINOR, PATCH);
+    fprintf(stdout, "Window Festival %d.%d.%d\n", MAJOR, MINOR, PATCH);
     exit(EXIT_SUCCESS);
   }
 
   if (argc > 1 && ((strcmp(argv[1], HELP_OPT_LONG) == 0)
                    || (strcmp(argv[1], HELP_OPT_SHRT) == 0))) {
-    fprintf(stdout, "Window Sweaters: launch the app for menu-bar controls.\nDeveloper options: --version, --trace, --no-menu. See README.md.\n");
+    fprintf(stdout, "Window Festival: launch the app for menu-bar controls.\nDeveloper options: --version, --trace, --no-menu. See README.md.\n");
     exit(EXIT_SUCCESS);
   }
 
@@ -225,13 +227,14 @@ int main(int argc, char** argv) {
   table_init(&g_settings.whitelist, 64, hash_blacklist, cmp_blacklist);
   g_settings.ax_focus = ax_check_trust(true);
 
+  knit_charts_load(knit_charts_dir());
   uint32_t update_mask = parse_settings(&g_settings, argc - 1, argv + 1);
   mach_port_t server_port = mach_get_bs_port(BS_NAME);
   if (server_port && update_mask) {
     send_args_to_server(server_port, argc, argv);
     return 0;
   } else if (server_port) {
-    error("A Window Sweaters instance is already running and no valid arguments"
+    error("A Window Festival instance is already running and no valid arguments"
           " were provided. To modify properties of the running instance"
           " provide them as arguments.\n");
   }
@@ -255,11 +258,12 @@ int main(int argc, char** argv) {
   // Restore the collection and preferences before any border is drawn.
   // Otherwise each preference application repaints every existing window.
   if (!g_no_menu) knit_menubar_prepare();
+  if (update_mask) parse_settings(&g_settings, argc - 1, argv + 1);
   windows_add_existing_windows(&g_windows);
   windows_reconcile_start();
 
   mach_server_begin(&g_mach_server, message_handler);
-  if (!update_mask) execute_config_file("window-sweaters", "sweatersrc");
+  if (!update_mask) execute_config_file("window-festival", "festivalrc");
 
   #ifdef _YABAI_INTEGRATION
   yabai_register_mach_port(&g_windows);

@@ -1,5 +1,5 @@
 CFILES = src/main.c src/parse.c src/mach.c src/hashtable.c src/events.c src/reconcile.c \
-         src/windows.c src/border.c src/animation.c src/knit.c src/chart.c src/apps.c
+         src/windows.c src/border.c src/animation.c src/knit.c src/chart.c src/patterns.m src/apps.c
 LIBS = -framework AppKit -framework Cocoa -framework CoreVideo -framework UniformTypeIdentifiers \
        -F/System/Library/PrivateFrameworks/ -framework SkyLight
 
@@ -16,13 +16,15 @@ all: | bin
 	clang $(ARCHS) $(DEPLOY) -O3 -g -Isrc -fobjc-arc -c src/menubar.m -o bin/menubar.o
 	clang $(ARCHS) $(DEPLOY) -O3 -g -Isrc -fobjc-arc -c src/autoyarn.m -o bin/autoyarn.o
 	clang $(ARCHS) $(DEPLOY) -O3 -g -Isrc -fobjc-arc -c src/hidden.m -o bin/hidden.o
-	clang $(ARCHS) $(DEPLOY) -std=c99 -O3 -g -Isrc $(CFILES) bin/menubar.o bin/autoyarn.o bin/hidden.o -o bin/borders $(LIBS)
+	clang $(ARCHS) $(DEPLOY) -O3 -g -Isrc -fobjc-arc -c src/library.m -o bin/library.o
+	clang -fobjc-arc $(ARCHS) $(DEPLOY) -std=c99 -O3 -g -Isrc $(CFILES) bin/menubar.o bin/autoyarn.o bin/hidden.o bin/library.o -o bin/borders $(LIBS) -framework Foundation
 
 debug: | bin
 	clang -O0 -g -Isrc -fobjc-arc -c src/menubar.m -o bin/menubar.o
 	clang -O0 -g -Isrc -fobjc-arc -c src/autoyarn.m -o bin/autoyarn.o
 	clang -O0 -g -Isrc -fobjc-arc -c src/hidden.m -o bin/hidden.o
-	clang -std=c99 -O0 -g -DDEBUG -Isrc $(CFILES) bin/menubar.o bin/autoyarn.o bin/hidden.o -o bin/debug $(LIBS)
+	clang -O0 -g -Isrc -fobjc-arc -c src/library.m -o bin/library.o
+	clang -fobjc-arc -std=c99 -O0 -g -DDEBUG -Isrc $(CFILES) bin/menubar.o bin/autoyarn.o bin/hidden.o bin/library.o -o bin/debug $(LIBS) -framework Foundation
 
 bin:
 	mkdir bin
@@ -30,17 +32,19 @@ bin:
 clean:
 	rm -rf bin
 
-bin/render-test: tests/render.c src/knit.c src/chart.c src/apps.c src/misc/knit.h src/misc/chart.h src/misc/apps.h tests/catalogue.h | bin
-	clang -std=c99 -O3 -Isrc tests/render.c src/knit.c src/chart.c src/apps.c -framework ApplicationServices -framework CoreText -o $@
+bin/render-test: tests/render.c src/knit.c src/chart.c src/patterns.m src/apps.c src/misc/knit.h src/misc/chart.h src/misc/apps.h tests/catalogue.h | bin
+	clang -fobjc-arc -std=c99 -O3 -Isrc tests/render.c src/knit.c src/chart.c src/patterns.m src/apps.c -framework ApplicationServices -framework CoreText -o $@ -framework Foundation
 
-test: bin/render-test
+test: bin/render-test bin/festival-test bin/patterns-test
+	bin/festival-test
+	bin/patterns-test
 	clang -std=c99 -O1 -g -fsanitize=address,undefined -Isrc tests/tracking.c src/animation.c -o bin/tracking-test $(LIBS)
 	bin/tracking-test
 	clang -std=c99 -O1 -g -fsanitize=address,undefined -Isrc tests/events.c src/hashtable.c -o bin/events-test $(LIBS)
 	bin/events-test
 	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/reconcile.m src/hashtable.c -o bin/reconcile-test $(LIBS)
 	bin/reconcile-test
-	clang -std=c99 -Wall -Wextra -Werror -fsanitize=address -g -Isrc tests/collection_test.c src/apps.c src/chart.c -o bin/collection-test -framework ApplicationServices
+	clang -fobjc-arc -std=c99 -Wall -Wextra -Werror -fsanitize=address -g -Isrc tests/collection_test.c src/apps.c src/chart.c src/patterns.m -o bin/collection-test -framework ApplicationServices -framework Foundation
 	bin/collection-test
 	clang -Wall -Wextra -Werror -fobjc-arc -fsanitize=address,undefined -g -Isrc tests/hidden_apps.m src/hidden.m -o bin/hidden-apps-test -framework AppKit
 	bin/hidden-apps-test
@@ -51,9 +55,9 @@ test: bin/render-test
 	bin/ax-focus-test
 	clang -std=c99 -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/menu.m src/hidden.m -framework Cocoa -framework UniformTypeIdentifiers -o bin/menu-test
 	bin/menu-test
-	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/autoyarn.m src/knit.c src/chart.c src/apps.c -framework Cocoa -framework ApplicationServices -o bin/autoyarn-test
+	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/autoyarn.m src/knit.c src/chart.c src/patterns.m src/apps.c -framework Cocoa -framework ApplicationServices -o bin/autoyarn-test -framework Foundation
 	bin/autoyarn-test
-	clang -std=c99 -O1 -g -fsanitize=address,undefined -Isrc tests/inactive_render.c src/parse.c src/hashtable.c src/knit.c src/chart.c src/apps.c -framework ApplicationServices -framework CoreText -o bin/inactive-render-test
+	clang -fobjc-arc -std=c99 -O1 -g -fsanitize=address,undefined -Isrc tests/inactive_render.c src/parse.c src/hashtable.c src/knit.c src/chart.c src/patterns.m src/apps.c -framework ApplicationServices -framework CoreText -o bin/inactive-render-test -framework Foundation
 	bin/inactive-render-test
 	bin/inactive-render-test --nonfinite
 	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/inactive_prefs.m src/hidden.m src/hashtable.c -framework Cocoa -framework UniformTypeIdentifiers -o bin/inactive-prefs-test
@@ -63,11 +67,11 @@ test: bin/render-test
 
 # Optional native integration probe: build only. Running it creates its own
 # temporary window; keep it out of unattended unit tests.
-bin/live-resize: tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/apps.c | bin
-	clang -O2 -g -fobjc-arc -Isrc tests/live_resize.m src/animation.c src/knit.c src/chart.c src/apps.c -o $@ $(LIBS)
+bin/live-resize: tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/patterns.m src/apps.c | bin
+	clang -O2 -g -fobjc-arc -Isrc tests/live_resize.m src/animation.c src/knit.c src/chart.c src/patterns.m src/apps.c -o $@ $(LIBS) -framework Foundation
 
-bin/live-order: tests/live_order.m tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/apps.c | bin
-	clang -O2 -g -fobjc-arc -Isrc tests/live_order.m src/animation.c src/knit.c src/chart.c src/apps.c -o $@ $(LIBS)
+bin/live-order: tests/live_order.m tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/patterns.m src/apps.c | bin
+	clang -O2 -g -fobjc-arc -Isrc tests/live_order.m src/animation.c src/knit.c src/chart.c src/patterns.m src/apps.c -o $@ $(LIBS) -framework Foundation
 
 preview: bin/render-test
 	mkdir -p outputs
@@ -84,9 +88,19 @@ bench: bin/render-test
 	bin/render-test --bench
 
 # Optional owned-window display handoff probe; --list is read-only.
-bin/live-display: tests/live_display.m tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/apps.c | bin
-	clang -O2 -g -fobjc-arc -Isrc tests/live_display.m src/animation.c src/knit.c src/chart.c src/apps.c -o $@ $(LIBS)
+bin/live-display: tests/live_display.m tests/live_resize.m src/border.c src/border.h src/knit.c src/chart.c src/patterns.m src/apps.c | bin
+	clang -O2 -g -fobjc-arc -Isrc tests/live_display.m src/animation.c src/knit.c src/chart.c src/patterns.m src/apps.c -o $@ $(LIBS) -framework Foundation
 
 # The README's By App / Zigzag comparison only; Zigzag colours are fixed in tests/render.c.
 styles: bin/render-test
 	bin/render-test --styles docs/collection/styles-comparison.png
+
+bin/festival-test: tests/festival.m tests/render.c tests/catalogue.h src/knit.c src/chart.c src/patterns.m src/apps.c src/parse.c src/parse.h src/misc/chart.h src/misc/knit.h | bin
+	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/festival.m src/knit.c src/chart.c src/patterns.m src/apps.c src/parse.c src/hashtable.c -framework Cocoa -framework ImageIO -o $@ -framework Foundation
+
+bin/patterns-test: tests/patterns.m tests/render.c src/patterns.m src/misc/patterns.h src/chart.c src/misc/chart.h src/knit.c src/apps.c | bin
+	clang -O1 -g -fobjc-arc -fsanitize=address,undefined -Isrc tests/patterns.m src/knit.c src/chart.c src/patterns.m src/apps.c -framework Cocoa -framework ImageIO -o $@
+
+# Opens one owned native window; not part of unattended make test.
+bin/library-ui-test: tests/library_ui.m src/library.m src/misc/library.h src/misc/width_presets.h src/misc/patterns.h src/patterns.m src/chart.c src/knit.c src/apps.c src/parse.c | bin
+	clang -O1 -g -fobjc-arc -Isrc tests/library_ui.m src/knit.c src/chart.c src/patterns.m src/apps.c src/parse.c src/hashtable.c -framework Cocoa -framework UniformTypeIdentifiers -framework QuartzCore -o $@

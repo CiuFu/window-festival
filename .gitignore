@@ -15,3 +15,12 @@ __pycache__/
 *.p12
 *.p8
 *.mobileprovision
+
+# Local credentials, signing files and crash captures
+*.pem
+*.key
+*.pfx
+*.keychain
+*.keychain-db
+*.ips
+*.crash

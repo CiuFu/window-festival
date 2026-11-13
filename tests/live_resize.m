@@ -55,6 +55,7 @@ static struct border* probe_border;
 static _Atomic(uint32_t) probe_wid;
 static _Atomic(uint64_t) request_ns;
 static bool running, notification_mode = true;
+static const char* probe_pattern;
 static unsigned requests, updates, move_events, resize_events, query_failures;
 static uint64_t start_ns;
 static NSDictionary* startup_details;
@@ -165,7 +166,8 @@ static NSDictionary* report(double seconds, NSString* error) {
       @"move_notifications": @(move_events), @"resize_notifications": @(resize_events),
       @"query_failures": @(query_failures), @"phases": phases, @"geometry": geometry,
       @"startup": startup_details ?: @{},
-      @"pattern": @"Chrome built-in app colourwork", @"border_width_points": @(g_settings.border_width),
+      @"chart": g_chart_active >= 0 ? @(g_charts[g_chart_active].name) : @"by-app",
+      @"pattern": probe_pattern ? @(probe_pattern) : @"atelier-chrome", @"border_width_points": @(g_settings.border_width),
       @"measurement_limit": @"Own-window geometry and CPU/API timings only; no pixel capture or presentation-synchronization proof. Target and border share this probe process. Notification delay is measured from the latest resize request, not a per-event correlation ID." };
 }
 
@@ -183,7 +185,12 @@ static NSDictionary* report(double seconds, NSString* error) {
   double seconds = start_ns ? (now_ns() - start_ns)/1e9 : 0;
   [self.timer invalidate]; self.timer = nil;
   atomic_store(&probe_wid, 0);
-  NSDictionary* result = report(seconds, error);
+  NSMutableDictionary* result = [report(seconds, error) mutableCopy];
+  if (probe_border && !error) {
+    result[@"settled_suppressed"] = @(probe_border->resize_suppressed);
+    memset(alignment, 0, sizeof alignment); sample_alignment(0);
+    result[@"settled_geometry_mismatches"] = @(alignment[0].errors);
+  }
   if (probe_border) { border_destroy(probe_border); probe_border = NULL; }
   [self.window orderOut:nil]; self.window.delegate = nil;
   [self.window close]; self.window = nil;
@@ -197,7 +204,10 @@ static NSDictionary* report(double seconds, NSString* error) {
 - (void)windowWillClose:(NSNotification*)notification { [self finish:@"probe_closed_early"]; }
 - (void)tick:(NSTimer*)timer {
   double elapsed = (now_ns() - start_ns)/1e9;
-  if (elapsed >= 3.0) {
+  if (elapsed >= 3.0 && elapsed < 3.3) {
+    update_border(); return; // Let the production resize suppression settle.
+  }
+  if (elapsed >= 3.3) {
     sample_alignment(1);
     [self finish:(notification_mode && !updates) ? @"no_target_notifications_received" : nil];
     return;
@@ -275,6 +285,7 @@ static NSDictionary* report(double seconds, NSString* error) {
   snprintf(probe_border->app, sizeof probe_border->app, "Chrome");
   knit_charts_load(NULL); // Built-in chart data only; does not touch user config.
   g_knit_pattern_by_app = true; g_chart_active = -1;
+  if (probe_pattern && !knit_pattern_select(probe_pattern)) { [self finish:@"unknown_pattern"]; return; }
   border_update(probe_border, false);
   details[@"border_window_id"] = @(probe_border->wid);
   details[@"border_context_created"] = @(probe_border->context != NULL);
@@ -299,13 +310,17 @@ static NSDictionary* report(double seconds, NSString* error) {
 @end
 
 int main(int argc, const char* argv[]) {
+  if (argc >= 3 && !strcmp(argv[argc-2], "--pattern")) {
+    probe_pattern = argv[argc-1];
+    argc -= 2;
+  }
   if (argc == 3 && strcmp(argv[1], "--mode") == 0) {
     if (strcmp(argv[2], "immediate") == 0) notification_mode = false;
     else if (strcmp(argv[2], "notifications") != 0) {
       fputs("Mode must be notifications or immediate.\n", stderr); return 2;
     }
   } else if (argc != 1) {
-    fputs("Usage: knit-live-resize [--mode notifications|immediate]\nCreates only its own visible probe window for three seconds.\n", stderr);
+    fputs("Usage: knit-live-resize [--mode notifications|immediate] [--pattern chart-name]\nCreates only its own visible probe window for three seconds.\n", stderr);
     return 2;
   }
   @autoreleasepool {

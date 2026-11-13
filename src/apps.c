@@ -1,3 +1,4 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #include "misc/apps.h"
 #include "misc/chart.h"
 #include <ctype.h>
@@ -61,7 +62,7 @@ static const struct app_rule k_collection[] = {
 };
 
 static const char* k_default_conf =
-  "# Window Sweaters — per-app colourways\n"
+  "# Window Festival — per-app colourways\n"
   "#\n"
   "# <app name> = #RRGGBB [chart]\n"
   "#\n"
@@ -70,7 +71,7 @@ static const char* k_default_conf =
   "# is a built-in chart or any file in the charts folder, without .png.\n"
   "# Personal rules take priority over the built-in app collection.\n"
   "#\n"
-  "# Edit, then restart Window Sweaters to load your changes.\n"
+  "# Edit, then restart Window Festival to load your changes.\n"
   "\n"
   "# 37 apps already have their own yarn and chart; see docs/COLLECTION.md.\n"
   "# Uncomment to customize:\n"
@@ -81,9 +82,9 @@ const char* knit_apps_path(void) {
   if (path[0]) return path;
   const char* home = getenv("HOME");
   if (!home || !*home) return "";
-  snprintf(path, sizeof path, "%s/Library/Application Support/Knit Borders", home);
+  snprintf(path, sizeof path, "%s/Library/Application Support/Window Festival", home);
   mkdir(path, 0755);
-  snprintf(path, sizeof path, "%s/Library/Application Support/Knit Borders/apps.conf", home);
+  snprintf(path, sizeof path, "%s/Library/Application Support/Window Festival/apps.conf", home);
   FILE* f = fopen(path, "r");
   if (f) { fclose(f); return path; }
   f = fopen(path, "w");                     // seed it the first time

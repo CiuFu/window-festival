@@ -17,7 +17,7 @@ static const char* const collection_names[] = {
   "atelier-spotify", "atelier-notion", "atelier-whatsapp", "atelier-figma",
   "atelier-chrome", "atelier-paper",
   "atelier-safari", "atelier-firefox", "atelier-cursor", "atelier-slack", "atelier-zoom", "atelier-telegram", "atelier-messages", "atelier-mail", "atelier-notes", "atelier-calendar", "atelier-reminders", "atelier-music", "atelier-photos", "atelier-preview", "atelier-word", "atelier-excel", "atelier-powerpoint", "atelier-outlook", "atelier-vscode", "atelier-photoshop", "atelier-illustrator",
-  "atelier-granola", "atelier-chatgpt", "atelier-ghostty", "braid", "blockstripe", "checker", "seedling", "trim", "picnic", "ribbon", "posy", "twinkle", "candy-stripe", "zigzag"
+  "atelier-granola", "atelier-chatgpt", "atelier-ghostty", "braid", "blockstripe", "checker", "seedling", "trim", "picnic", "ribbon", "posy", "twinkle", "candy-stripe", "zigzag", "festival-plum", "festival-lantern", "festival-spring", "festival-daisy", "festival-bamboo", "festival-tulip", "festival-cloud", "festival-diamond", "festival-persimmon"
 };
 enum { COLLECTION_COUNT = sizeof collection_names / sizeof collection_names[0] };
 
@@ -185,12 +185,12 @@ static void test_preserved_charts(void) {
 }
 
 static void test_charts(const char* dir) {
-  assert(COLLECTION_COUNT == 47);
+  assert(COLLECTION_COUNT == 56);
   assert(knit_charts_load("/does-not-exist/knit-test") == COLLECTION_COUNT);
   for (int i = 0; i < COLLECTION_COUNT; i++) {
     assert(knit_chart_index(collection_names[i]) == i); // names are unique and stable
     const struct knit_chart* chart = &g_charts[i];
-    assert(chart->h > 0 && chart->h <= 12 && chart->w > 0 && chart->w <= 256 && chart->px);
+    assert(chart->h > 0 && chart->h <= 14 && chart->w > 0 && chart->w <= 256 && chart->px);
     bool has_base = false, has_contrast = false;
     uint32_t yarns[16];
     int yarn_count = 0;
@@ -276,7 +276,7 @@ int main(void) {
   char library[1024], support[1024], app[1024], charts[1024];
   snprintf(library, sizeof library, "%s/Library", home);
   snprintf(support, sizeof support, "%s/Library/Application Support", home);
-  snprintf(app, sizeof app, "%s/Library/Application Support/Knit Borders", home);
+  snprintf(app, sizeof app, "%s/Library/Application Support/Window Festival", home);
   snprintf(charts, sizeof charts, "%s/charts", home);
   make_directory(library);
   make_directory(support);
@@ -290,6 +290,6 @@ int main(void) {
   assert(rmdir(support) == 0);
   assert(rmdir(library) == 0);
   assert(rmdir(home) == 0);
-  puts("Collection tests passed: 37 app profiles, 47 valid charts, strict parsing, app precedence, By App/global/plain patterns, Chrome, overrides, stable reloads.");
+  puts("Collection tests passed: 37 app profiles, 56 valid charts, strict parsing, app precedence, By App/global/plain patterns, Chrome, overrides, stable reloads.");
   return 0;
 }

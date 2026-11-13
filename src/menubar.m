@@ -1,3 +1,4 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 // The menu bar extra: a status item that drives the running border daemon.
 //
 // It lives in the same process as the renderer, so it changes the renderer's
@@ -8,6 +9,8 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include "misc/knit.h"
 #include "misc/chart.h"
+#include "misc/library.h"
+#include "misc/width_presets.h"
 #include "misc/apps.h"
 #include "misc/status_icon.h"
 #include <stdio.h>
@@ -121,11 +124,13 @@ static bool knit_menu_colourwork(void) {
 static float knit_menu_minimum_rows(void) {
   if (!knit_menu_colourwork()) return 3.f;
   if (!g_knit_pattern_by_app && knit_menu_chart_selectable(g_chart_active))
-    return MAX(6, g_charts[g_chart_active].h);
+    return g_charts[g_chart_active].upright ? 1.5f : MAX(6, g_charts[g_chart_active].h);
   return 6.f;
 }
 
 static NSString* knit_menu_chart_title(const char* name) {
+  int index = knit_chart_index(name);
+  if (index >= 0 && g_charts[index].title[0]) return @(g_charts[index].title);
   NSString* title = [NSString stringWithUTF8String:name];
   return [[[title stringByReplacingOccurrencesOfString:@"_" withString:@" "]
                    stringByReplacingOccurrencesOfString:@"-" withString:@" "] capitalizedString];
@@ -143,6 +148,15 @@ static bool knit_menu_legacy_chart(const char* name) {
 }
 
 static const struct { const char* name; const char* title; } knit_menu_patterns[] = {
+  { "festival-plum", "Plum Blossom · 梅花" },
+  { "festival-lantern", "Lantern · 灯笼" },
+  { "festival-spring", "Spring · 春" },
+  { "festival-daisy", "Daisy · 雏菊" },
+  { "festival-bamboo", "Bamboo · 竹叶" },
+  { "festival-tulip", "Tulip · 郁金香" },
+  { "festival-cloud", "Cloud · 祥云" },
+  { "festival-diamond", "Diamond · 菱花" },
+  { "festival-persimmon", "Persimmon · 柿子" },
   { "zigzag", "Zigzag" },
   { "picnic", "Picnic Checks" }, { "ribbon", "Ribbon Stripes" },
   { "posy", "Little Bows" }, { "twinkle", "Tiny Stars" },
@@ -167,6 +181,7 @@ static bool knit_menu_path_available(const char* path, bool directory) {
 // Menu choices survive a restart, the way a menu bar app should.
 static void knit_save_prefs(void) {
   NSUserDefaults* d = NSUserDefaults.standardUserDefaults;
+  [d setObject:@"patterns" forKey:@"theme"];
   [d setBool:g_knit_on forKey:@"on"];
   [d setInteger:g_knit_stitch forKey:@"yarn"];
   [d setInteger:g_knit_basket forKey:@"basket"];
@@ -190,6 +205,12 @@ static void knit_load_prefs(void) {
   // A missing mode therefore migrates to By App, preserving those sweaters.
   [d registerDefaults:@{ @"on": @YES, @"yarn": @0, @"basket": @3, @"width": @12.0f, @"gauge": @6.0f, @"chart": @"none", @"patternByApp": @YES, @"anchor": @0, @"appsOnByDefault": @YES, @"appExceptions": @[] }];
   char buf[128];
+  // One-time migration from the PNG-theme prototype; leave user files untouched.
+  if ([[d stringForKey:@"theme"] isEqualToString:@"spring-festival"]) {
+    [d setObject:@"festival-lantern" forKey:@"chart"];
+    [d setBool:NO forKey:@"patternByApp"];
+    [d setObject:@"patterns" forKey:@"theme"];
+  }
 
   NSInteger y = [d integerForKey:@"yarn"];
   if (y < 0 || y >= KNIT_STITCH_COUNT) y = 0;
@@ -258,7 +279,10 @@ static void knit_load_prefs(void) {
   NSString* argument = sender.representedObject;
   if ([argument hasPrefix:@"chart="] && ![argument isEqualToString:@"chart=none"]) {
     int chart = knit_chart_index([argument substringFromIndex:6].UTF8String);
-    float minimum = knit_menu_chart_selectable(chart) ? MAX(6, g_charts[chart].h) : 6;
+    if (chart >= 0 && g_charts[chart].packaged && g_charts[chart].preferred_width > 0)
+      knit_apply([[NSString stringWithFormat:@"width=%g", g_charts[chart].preferred_width] UTF8String]);
+    float minimum = knit_menu_chart_selectable(chart)
+        ? (g_charts[chart].upright ? g_knit.rows : MAX(6, g_charts[chart].h)) : 6;
     if (g_knit.rows < minimum) {
       NSString* gauge = [NSString stringWithFormat:@"gauge=%g", minimum];
       knit_apply(gauge.UTF8String);
@@ -277,6 +301,8 @@ static void knit_load_prefs(void) {
   }
   knit_save_prefs();
 }
+
+- (void)openLibrary:(id)sender { knit_library_show(knit_apply, knit_save_prefs); }
 
 - (void)selectPlain:(NSMenuItem*)sender {
   knit_apply("chart=none");
@@ -304,7 +330,7 @@ static void knit_load_prefs(void) {
                    : noApps     ? @"Sweaters are off for all apps"
                                 : @"Sweaters are on";
   self.item.button.alphaValue = g_knit_on && !noApps ? 1.0 : 0.45;
-  self.item.button.toolTip = [@"Window Sweaters — " stringByAppendingString:status.lowercaseString];
+  self.item.button.toolTip = [@"Window Festival — " stringByAppendingString:status.lowercaseString];
   [self.item.button setAccessibilityValue:status];
 }
 
@@ -456,9 +482,9 @@ static void knit_load_prefs(void) {
   if (!knit_menu_chart_valid(index)) return nil;
   const struct knit_chart* chart = &g_charts[index];
   const int columns = MIN(24, MAX(12, chart->w));
-  const int rows = MIN(8, MAX(6, chart->h));
-  const uint32_t base = 0xff638575;
-  uint32_t colors[24 * 8];
+  const int rows = chart->upright ? MIN(14, chart->h) : MIN(8, MAX(6, chart->h));
+  const uint32_t base = chart->base_color ? chart->base_color : 0xff638575;
+  uint32_t colors[24 * 14];
   for (int y = 0; y < rows; y++) {
     for (int x = 0; x < columns; x++) {
       uint32_t pixel = chart->px[(y % chart->h) * chart->w + x % chart->w];
@@ -520,6 +546,7 @@ static void knit_load_prefs(void) {
   [menu itemAtIndex:0].state = g_knit_on ? NSControlStateValueOn : NSControlStateValueOff;
 
   [self buildApps:[self submenu:menu title:@"Apps"]];
+  [self addAction:menu title:@"Pattern Library · 图案库…" selector:@selector(openLibrary:)];
 
   NSMenu* pattern = [self submenu:menu title:@"Pattern"];
   NSMenuItem* byApp = [self add:pattern title:@"By App" arg:@"chart=by-app"
@@ -548,7 +575,9 @@ static void knit_load_prefs(void) {
         arg:[NSString stringWithFormat:@"chart=%s", knit_menu_patterns[i].name]
         on:(!g_knit_pattern_by_app && g_chart_active == index)];
     choice.image = [self swatchForChart:index];
-    choice.toolTip = strcmp(knit_menu_patterns[i].name, "zigzag") == 0
+    choice.toolTip = g_charts[index].upright
+        ? @"A pure knitted motif in its own yarn colours. Try 28 pt for clear details; Stitch Size is fixed."
+        : strcmp(knit_menu_patterns[i].name, "zigzag") == 0
         ? @"Uses colours from app icons, with cream or deeper zigzags for contrast."
         : @"Pattern preview. Each app keeps its own main yarn colour.";
   }
@@ -580,15 +609,12 @@ static void knit_load_prefs(void) {
 
   NSMenu* widths = [self submenu:menu title:@"Border Width"];
   float width = knit_current_width();
-  const struct { const char* name; float value; } widthChoices[] = {
-    { "Slim", 6 }, { "Narrow", 8 }, { "Medium", 12 }, { "Regular", 14 }, { "Wide", 18 }, { "Extra Wide", 28 }
-  };
   BOOL standardWidth = NO;
-  for (size_t i = 0; i < sizeof widthChoices / sizeof widthChoices[0]; i++) {
-    BOOL selected = fabsf(width - widthChoices[i].value) < 0.001f;
+  for (size_t i = 0; i < sizeof knit_width_presets / sizeof knit_width_presets[0]; i++) {
+    BOOL selected = fabsf(width - knit_width_presets[i].value) < 0.001f;
     standardWidth |= selected;
-    [self add:widths title:[NSString stringWithFormat:@"%s · %g pt", widthChoices[i].name, widthChoices[i].value]
-        arg:[NSString stringWithFormat:@"width=%g", widthChoices[i].value] on:selected];
+    [self add:widths title:[NSString stringWithFormat:@"%s · %g pt", knit_width_presets[i].name, knit_width_presets[i].value]
+        arg:[NSString stringWithFormat:@"width=%g", knit_width_presets[i].value] on:selected];
   }
   if (!standardWidth) {
     [widths addItem:[NSMenuItem separatorItem]];
@@ -615,6 +641,12 @@ static void knit_load_prefs(void) {
         arg:[NSString stringWithFormat:@"gauge=%g", g_knit.rows] on:YES];
   }
 
+  BOOL fixedGrid = knit_menu_chart_valid(g_chart_active) && !g_knit_pattern_by_app
+                   && g_charts[g_chart_active].upright;
+  [menu itemWithTitle:@"Stitch Size"].enabled = !fixedGrid;
+  [menu itemWithTitle:@"Stitch Size"].toolTip = fixedGrid
+      ? @"This motif uses a fixed stitch grid. Increase Border Width to enlarge it." : nil;
+
   NSMenu* inactive = [self submenu:menu title:@"Inactive Windows"];
   BOOL grey = g_knit_grey > 0.001f, dimmed = !grey && g_knit_dim > 0.001f;
   [self add:inactive title:@"Full Colour" arg:@"inactive=colour" on:!grey && !dimmed].toolTip =
@@ -625,7 +657,7 @@ static void knit_load_prefs(void) {
       @"Only the window you're using wears colour.";
 
   [menu addItem:[NSMenuItem separatorItem]];
-  NSMenuItem* quit = [[NSMenuItem alloc] initWithTitle:@"Quit Window Sweaters"
+  NSMenuItem* quit = [[NSMenuItem alloc] initWithTitle:@"Quit Window Festival"
                                              action:@selector(quit:) keyEquivalent:@"q"];
   quit.target = self;
   quit.enabled = YES;
@@ -646,9 +678,9 @@ static KnitMenu* g_menu = nil;
   g_menu.item = [[NSStatusBar systemStatusBar]
                   statusItemWithLength:NSSquareStatusItemLength];
   g_menu.item.button.image = knit_status_icon();
-  [g_menu.item.button setAccessibilityLabel:@"Window Sweaters"];
+  [g_menu.item.button setAccessibilityLabel:@"Window Festival"];
 
-  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Window Sweaters"];
+  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Window Festival"];
   menu.autoenablesItems = NO;
   [g_menu rebuild:menu];
   menu.delegate = g_menu;

@@ -1,4 +1,6 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #include "misc/chart.h"
+#include "misc/patterns.h"
 #include <ApplicationServices/ApplicationServices.h>
 #include <dirent.h>
 #include <string.h>
@@ -14,9 +16,9 @@ const char* knit_charts_dir(void) {
   if (dir[0]) return dir;
   const char* home = getenv("HOME");
   if (!home || !*home) return "";
-  snprintf(dir, sizeof dir, "%s/Library/Application Support/Knit Borders", home);
+  snprintf(dir, sizeof dir, "%s/Library/Application Support/Window Festival", home);
   mkdir(dir, 0755);
-  snprintf(dir, sizeof dir, "%s/Library/Application Support/Knit Borders/charts", home);
+  snprintf(dir, sizeof dir, "%s/Library/Application Support/Window Festival/charts", home);
   mkdir(dir, 0755);
   return dir;
 }
@@ -32,7 +34,7 @@ int g_chart_active = -1;
 // and when the user chart folder is unavailable.
 struct collection_chart {
   const char* name;
-  const char* rows[12];
+  const char* rows[14];
   uint32_t yarn[6]; // a..f
 };
 
@@ -226,12 +228,163 @@ static const struct collection_chart k_collection[] = {
       "a....aa....a", "aa........aa", ".aa......aa.",
       "..aa....aa..", "...aa..aa...", "....aaaa...." },
     { 0xfff6f0deu } },   // cream; a pale app gets a deeper shade (autoyarn.m)
+  { "festival-plum", {
+      "............",
+      ".....a......",
+      "....aaa.....",
+      "..a..a..a...",
+      ".aaabbbaaa..",
+      "..a.bdb.a...",
+      "...a.b.a....",
+      "..aaa.aaa...",
+      "...a..ca....",
+      ".....c.cc...",
+      "...ccc.c....",
+      ".....c......",
+    }, { 0xffffd9c7u, 0xffe88d93u, 0xffa9bd88u, 0xffedc06bu } },
+  { "festival-lantern", {
+      "..............",
+      "......a.......",
+      ".....aaa......",
+      "....aaaaa.....",
+      "...abbcbba....",
+      "..abbcccbba...",
+      "..abbcccbba...",
+      "..abbcccbba...",
+      "...abbcbba....",
+      "....aaaaa.....",
+      "......a.......",
+      ".....aaa......",
+      ".....a.a......",
+      "..............",
+    }, { 0xffefc578u, 0xffd3453fu, 0xfff18b5cu } },
+  { "festival-spring", {
+      "..............",
+      "......a.......",
+      "...aaaaaaaa...",
+      ".....aa.......",
+      "....aaaaaa....",
+      ".....aa.......",
+      "..aaaaaaaaaa..",
+      "....a....a....",
+      "...a.aaaa.a...",
+      "..a..a..a..a..",
+      ".....aaaa.....",
+      ".....a..a.....",
+      ".....aaaa.....",
+      "..............",
+    }, { 0xffedca85u } },
+  { "festival-daisy", {
+      "..............",
+      "......a.......",
+      "....aaaaa.....",
+      "...aaaaaaa....",
+      "...aabbbaa....",
+      "..aaabbbaaa...",
+      "...aabbbaa....",
+      "...aaaaaaa....",
+      "....aaaaa.....",
+      "......a.c.....",
+      "....ccccc.....",
+      ".....cc.......",
+      "......c.......",
+      "..............",
+    }, { 0xfff4ebd6u, 0xffe9b95cu, 0xff8aa98au } },
+  { "festival-bamboo", {
+      "..............",
+      "......a..b....",
+      "......a.bb....",
+      "..bb..abb.....",
+      "...bb.c.......",
+      "....bba..bb...",
+      "......a.bb....",
+      "......abb.....",
+      "..bb..c.......",
+      "...bb.a.......",
+      "....bba.bb....",
+      "......ab......",
+      "......c.......",
+      "..............",
+    }, { 0xffbed0a0u, 0xff8fb18du, 0xffe2d4a4u } },
+  { "festival-tulip", {
+      "..............",
+      "..............",
+      "...a..a..a....",
+      "...bbbaaaa....",
+      "...bbbaaaa....",
+      "....bbaaa.....",
+      "....bbaaa.....",
+      ".....baa......",
+      "......c.......",
+      "...c..c..c....",
+      "...cc.c.cc....",
+      "....ccccc.....",
+      ".....ccc......",
+      "..............",
+    }, { 0xffbd5369u, 0xffe194a4u, 0xff5b8264u } },
+  { "festival-cloud", {
+      "..............",
+      "..............",
+      "......aaa.....",
+      ".....a...aa...",
+      "...aaa....a...",
+      "..a.......aa..",
+      "..a..aaa...a..",
+      "...aa...a..a..",
+      "....aaaa..a...",
+      ".........a....",
+      "...bbbbbb.....",
+      "..............",
+      "..............",
+      "..............",
+    }, { 0xffe8d9b8u, 0xffbc9765u } },
+  { "festival-diamond", {
+      "..............",
+      "......a.......",
+      ".....a.a......",
+      "....a...a.....",
+      "...a..b..a....",
+      "..a..b.b..a...",
+      ".a..b.c.b..a..",
+      "..a..b.b..a...",
+      "...a..b..a....",
+      "....a...a.....",
+      ".....a.a......",
+      "......a.......",
+      "..............",
+      "..............",
+    }, { 0xffead3a4u, 0xffd59575u, 0xffb6d4c4u } },
+  { "festival-persimmon", {
+      "..............",
+      "..............",
+      "......c.......",
+      "......cc......",
+      "....cccccc....",
+      "....bcaaca....",
+      "...bbbaaaaa...",
+      "...bbbaaaaa...",
+      "...bbbaaaaa...",
+      "...bbbaaaaa...",
+      "....bbaaaa....",
+      "..............",
+      "..............",
+      "..............",
+    }, { 0xffe69750u, 0xfff4b36au, 0xff93ad7fu } },
 };
 
-// Solid patches finish patterns that otherwise collide at the mitre.
-// A zero colour follows the app's own base yarn, including personal palettes.
-static const struct { const char* chart; uint32_t color; } k_corner_styles[] = {
-  { "atelier-whatsapp", 0 },       // keep its stripe joins quiet
+// Solid patches finish motifs that otherwise collide at the mitre.
+// Zero colours follow the app yarn; festival motifs have their own palette.
+static const struct { const char* chart; uint32_t color, base_color; bool upright; } k_chart_styles[] = {
+  { "atelier-whatsapp", 0, 0, false },
+  { "festival-plum", 0, 0xff8e3041u, true },
+  { "festival-lantern", 0, 0xff8e2735u, true },
+  { "festival-spring", 0, 0xffa52e36u, true },
+  { "festival-daisy", 0, 0xff34586fu, true },
+  { "festival-bamboo", 0, 0xff294e43u, true },
+  { "festival-tulip", 0, 0xffe8dec7u, true },
+  { "festival-cloud", 0, 0xff30465fu, true },
+  { "festival-diamond", 0, 0xff2c6666u, true },
+  { "festival-persimmon", 0, 0xff5a3f3bu, true },
 };
 
 _Static_assert(sizeof k_collection / sizeof k_collection[0] <= KNIT_CHART_MAX,
@@ -242,7 +395,7 @@ static void load_collection(void) {
     const struct collection_chart* spec = &k_collection[i];
     int w = (int)strlen(spec->rows[0]);
     int h = 0;
-    while (h < 12 && spec->rows[h]) h++;
+    while (h < 14 && spec->rows[h]) h++;
     uint32_t* pixels = calloc((size_t)w * h, sizeof *pixels);
     if (!pixels) continue;
     for (int y = 0; y < h; y++)
@@ -256,10 +409,13 @@ static void load_collection(void) {
     chart->w = w;
     chart->h = h;
     chart->px = pixels;
-    for (size_t corner = 0; corner < sizeof k_corner_styles / sizeof k_corner_styles[0]; corner++)
-      if (strcmp(spec->name, k_corner_styles[corner].chart) == 0) {
+    chart->spacing = .75f;
+    for (size_t corner = 0; corner < sizeof k_chart_styles / sizeof k_chart_styles[0]; corner++)
+      if (strcmp(spec->name, k_chart_styles[corner].chart) == 0) {
         chart->solid_corners = true;
-        chart->corner_color = k_corner_styles[corner].color;
+        chart->corner_color = k_chart_styles[corner].color;
+        chart->base_color = k_chart_styles[corner].base_color;
+        chart->upright = k_chart_styles[corner].upright;
         break;
       }
     if (strcmp(spec->name, "atelier-notes") == 0
@@ -363,6 +519,9 @@ int knit_charts_load(const char* dir) {
         chart.custom = true;
         if (target < 0) target = g_chart_count++;
         else {
+          chart.base_color = g_charts[target].base_color;
+          chart.upright = g_charts[target].upright;
+          chart.spacing = g_charts[target].spacing;
           chart.solid_corners = g_charts[target].solid_corners;
           chart.corner_color = g_charts[target].corner_color;
           chart.cuff_color = g_charts[target].cuff_color;
@@ -378,6 +537,7 @@ int knit_charts_load(const char* dir) {
     free(e);
   }
   free(entries);
+  knit_patterns_load(dir);
   g_chart_active = active_name[0] ? knit_chart_index(active_name) : -1;
   return g_chart_count;
 }

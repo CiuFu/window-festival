@@ -3,9 +3,10 @@
 #include <stdbool.h>
 
 // A colourwork chart: one pixel = one colour cell, like a paper knitting
-// chart. Each cell renders as 2x2 fine stitches, or one defined stitch. Authored as a small PNG.
+// chart. Each cell renders as 2x2 fine stitches, or one defined stitch.
+// Built-ins are character grids; user charts can be authored as small PNGs.
 //
-//   fully transparent pixel -> the window's own yarn colour
+//   fully transparent pixel -> the chart's base colour or the window's yarn
 //   opaque pixel           -> that literal colour, knitted as a contrast yarn
 //
 // The image's width and height are the pattern repeat, so an 8x8 PNG is an
@@ -15,8 +16,14 @@
 
 struct knit_chart {
   char name[64];
+  char title[128];    // display name for a portable pattern package
   int w, h;
   uint32_t* px;      // ARGB, row 0 = top of the chart as authored
+  uint32_t base_color; // authored palette; zero preserves the app-derived yarn
+  bool upright;      // fixed square stitch grid; symbols stay upright on all sides
+  float spacing;     // blank interval as a multiple of the motif width
+  float preferred_width; // package's chosen border width; zero keeps current width
+  bool packaged;     // imported .knit.json; built-ins remain immutable
   bool solid_corners; // use a solid yarn patch on the rounded arcs
   uint32_t corner_color; // zero follows the base yarn, otherwise opaque ARGB
   uint32_t cuff_color; // optional curved outer cuff, one third of the band

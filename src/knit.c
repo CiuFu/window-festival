@@ -298,8 +298,8 @@ static struct knit_tile knit_make_fabric(float band, uint32_t color, int chart,
   return (struct knit_tile){band, color, chart, image, tw, th};
 }
 
-static struct knit_tile knit_make_tile(float band, uint32_t color, int chart) {
-  const struct knit_chart* ch = chart >= 0 && chart < g_chart_count ? &g_charts[chart] : NULL;
+static struct knit_tile knit_make_tile(float band, uint32_t color, int chart, const struct knit_chart* preview) {
+  const struct knit_chart* ch = preview ? preview : (chart >= 0 && chart < g_chart_count ? &g_charts[chart] : NULL);
   bool sculpted = chart == KNIT_PATCH_CHART || (ch && ch->sculpted_yarn);
   struct knit_gauge material = g_knit;
   if (sculpted) {
@@ -308,6 +308,7 @@ static struct knit_tile knit_make_tile(float band, uint32_t color, int chart) {
     material.ground = 0.94f; material.ambient = 0.84f;
     material.relief = 1.65f; material.sheen = 0.28f;
   }
+  if (ch && ch->upright) { material.rows = ch->h; material.aspect = 1.f; }
   float rows = material.rows; if (rows < 1.5f) rows = 1.5f;
   float row_step = band / rows;
   float sh = row_step / (1.f - material.row_overlap);
@@ -352,6 +353,7 @@ static struct knit_tile knit_make_tile(float band, uint32_t color, int chart) {
         uint32_t px = 0;
         if (ch) {
           int cx = (i % ch->w + ch->w) % ch->w, cy = (j % ch->h + ch->h) % ch->h;
+          if (ch->upright) cy = ch->h - 1 - cy;
           px = ch->px[(size_t)cy * ch->w + cx];
         }
         uint32_t yc = (px >> 24) < 128 ? color : (px | 0xff000000u);
@@ -497,7 +499,7 @@ static struct knit_tile knit_get_tile(float band, uint32_t color, int chart) {
       return t;
     }
   }
-  struct knit_tile t = knit_make_tile(band, color, chart);
+  struct knit_tile t = knit_make_tile(band, color, chart, NULL);
   if (!t.img) { pthread_mutex_unlock(&g_cache_lock); return t; }
   if (g_cache_n == KNIT_CACHE_LEN) {              // full: drop the oldest
     CGImageRelease(g_cache[0].img);
@@ -560,8 +562,9 @@ void knit_draw(CGContextRef ctx, CGRect win, float radius, float band,
   knit_draw_faded(ctx, win, radius, band, color, chart, dim, 0.f, tuck);
 }
 
-void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
-                     uint32_t color, int chart, float dim, float grey, float tuck) {
+static void knit_draw_impl(CGContextRef ctx, CGRect win, float radius, float band,
+                     uint32_t color, int chart, float dim, float grey, float tuck,
+                     const struct knit_chart* preview) {
   // Greying is optional: a bad value means none, never a missing sweater.
   if (!isfinite(grey) || grey < 0.f) grey = 0.f;
   if (grey > 1.f) grey = 1.f;
@@ -592,15 +595,20 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
   CGContextEOClip(ctx);
   CFRelease(ring);
 
-  bool solid_corners = chart >= 0 && chart < g_chart_count && g_charts[chart].solid_corners;
-  uint32_t corner_color = solid_corners && g_charts[chart].corner_color
-                            ? g_charts[chart].corner_color : color;
-  struct knit_tile t = knit_get_tile(band, color, chart);
+  const struct knit_chart* profile = preview ? preview : (chart >= 0 && chart < g_chart_count ? &g_charts[chart] : NULL);
+  bool upright = profile && profile->upright;
+  bool flipped = CGContextGetCTM(ctx).d < 0;
+  if (profile && profile->base_color) color = profile->base_color;
+  bool solid_corners = profile && profile->solid_corners;
+  uint32_t corner_color = solid_corners && profile->corner_color
+                            ? profile->corner_color : color;
+  struct knit_tile t = preview ? knit_make_tile(roundf(band*2.f)/2.f, color, chart, preview)
+                              : knit_get_tile(band, color, chart);
   if (!t.img) { CGContextRestoreGState(ctx); return; }
   struct knit_tile cuff_tile = {0};
   CGMutablePathRef cuff_ring = NULL;
-  if (chart >= 0 && chart < g_chart_count && g_charts[chart].cuff_color) {
-    cuff_tile = knit_get_tile(band, g_charts[chart].cuff_color, KNIT_PATCH_CHART);
+  if (profile && profile->cuff_color) {
+    cuff_tile = knit_get_tile(band, profile->cuff_color, KNIT_PATCH_CHART);
     if (cuff_tile.img) {
       float width = band / 3.f;
       cuff_ring = CGPathCreateMutable();
@@ -611,6 +619,7 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
   }
   struct knit_tile patch = {0};
   if (solid_corners) patch = knit_get_tile(band, corner_color, KNIT_PATCH_CHART);
+  if (upright) patch.w = patch.h = 8.f * band / profile->h;
   knit_grey_tile(&t, grey);
   knit_grey_tile(&cuff_tile, grey);
   knit_grey_tile(&patch, grey);
@@ -676,8 +685,7 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
     float px = (g_knit_anchor == KNIT_ANCHOR_CENTRE) ? L * 0.5f - t.w * 0.5f : 0.f;
     // The app collection starts with a cuff at the outside edge. Its phase
     // depends only on the yarn gauge, never on the changing window size.
-    bool cuff = chart >= 0 && chart < g_chart_count
-                && strncmp(g_charts[chart].name, "atelier-", 8) == 0;
+    bool cuff = profile && strncmp(profile->name, "atelier-", 8) == 0;
     float py = cuff ? 0.f : band * 0.5f - t.h * 0.5f;
     // Opaque backing also covers image-sampling slivers at tile/curve edges.
     // Its clip is one narrow side, never the full window backing store.
@@ -687,7 +695,7 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
     r += (l - r) * grey; g += (l - g) * grey; b += (l - b) * grey;
     CGContextSetRGBFillColor(ctx, r * 0.96f, g * 0.96f, b * 0.96f, 1.f);
     CGContextFillRect(ctx, CGRectMake(0.f, 0.f, L, d));
-    if (patch.img) {
+    if (patch.img && !upright) {
       // Paint only the two small caps, not a second texture under the entire
       // edge. Separate clips keep DrawTiledImage's bounding boxes small.
       float cap = fminf(orad, L * 0.5f);
@@ -698,7 +706,37 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
         CGContextRestoreGState(ctx);
       }
     }
-    if (solid_corners) {
+    if (upright) {
+      // Knit the whole edge, then place complete upright motifs between corner tangents.
+      if (patch.img) CGContextDrawTiledImage(ctx, CGRectMake(0.f, py, patch.w, patch.h), patch.img);
+      float cap = fminf(orad, L * .5f);
+      float spacing = isfinite(profile->spacing) ? fminf(3, fmaxf(0, profile->spacing)) : .75f;
+      float gap = band * spacing, pitch = band + gap;
+      int repeats = (int)floorf((fmaxf(0, L - 2 * cap) + gap) / pitch);
+      if (repeats > 0) {
+        float length = repeats * pitch - gap, start = (L - length) * .5f;
+        CGRect strip;
+        if (i == 0) strip = CGRectMake(CGRectGetMinX(outer) + start, CGRectGetMinY(outer), length, band);
+        else if (i == 1) strip = CGRectMake(CGRectGetMaxX(win), CGRectGetMinY(outer) + start, band, length);
+        else if (i == 2) strip = CGRectMake(CGRectGetMaxX(outer) - start - length, CGRectGetMaxY(win), length, band);
+        else strip = CGRectMake(CGRectGetMinX(outer), CGRectGetMaxY(outer) - start - length, band, length);
+        CGContextSaveGState(ctx);
+        CGContextRotateCTM(ctx, -sides[i].angle);
+        CGContextTranslateCTM(ctx, -sides[i].ox, -sides[i].oy);
+        CGContextClipToRect(ctx, strip);
+        // Native window contexts are y-up; previews may use a flipped canvas.
+        if (flipped) {
+          CGContextTranslateCTM(ctx, 0, CGRectGetMinY(strip) + CGRectGetMaxY(strip));
+          CGContextScaleCTM(ctx, 1, -1);
+        }
+        for (int motif = 0; motif < repeats; motif++) {
+          float x = strip.origin.x + (i % 2 ? 0 : motif * pitch);
+          float y = strip.origin.y + (i % 2 ? motif * pitch : 0);
+          CGContextDrawImage(ctx, CGRectMake(x, y, band, band), t.img);
+        }
+        CGContextRestoreGState(ctx);
+      }
+    } else if (solid_corners) {
       CGContextSaveGState(ctx);
       // Keep the curved arc in the base yarn; start the stripe after the
       // tangent. Radius is clamped above, and short edges can be all solid.
@@ -718,7 +756,7 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
     } else {
       // Symmetric stripe/check charts can meet at both mitres when each edge
       // contains whole repeats. Other designs retain their existing phase.
-      bool fitted = chart >= 0 && chart < g_chart_count && g_charts[chart].fitted_repeat;
+      bool fitted = profile && profile->fitted_repeat;
       float repeat_width = fitted ? L / fmaxf(1.f, roundf(L / t.w)) : t.w;
       CGContextDrawTiledImage(ctx, CGRectMake(fitted ? 0.f : px, py, repeat_width, t.h), t.img);
     }
@@ -753,4 +791,17 @@ void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
   if (cuff_tile.img) CGImageRelease(cuff_tile.img);
   if (cuff_ring) CFRelease(cuff_ring);
   CGContextRestoreGState(ctx);
+}
+
+void knit_draw_faded(CGContextRef ctx, CGRect win, float radius, float band,
+                     uint32_t color, int chart, float dim, float grey, float tuck) {
+  knit_draw_impl(ctx, win, radius, band, color, chart, dim, grey, tuck, NULL);
+}
+
+void knit_draw_pattern_preview(CGContextRef ctx, CGRect win, float radius, float band,
+                               const struct knit_chart* pattern) {
+  if (!pattern || !pattern->px || !pattern->upright || !pattern->sculpted_yarn ||
+      pattern->w != pattern->h || pattern->w < 4 || pattern->w > 14) return;
+  // Draft tiles are owned by this draw; they never replace a live chart or its cache entry.
+  knit_draw_impl(ctx, win, radius, band, pattern->base_color, -1, 0, 0, 0, pattern);
 }

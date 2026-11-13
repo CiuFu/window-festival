@@ -108,3 +108,8 @@ void knit_flush_cache(void);
 /// CGImage pointer) for this key, or NULL on a miss. Reading does not refresh
 /// recency. The pointer is not retained; do not release it.
 const void* knit_tile_identity(float band, uint32_t color, int chart);
+
+struct knit_chart;
+/// Render an unsaved library draft through the normal border renderer.
+void knit_draw_pattern_preview(CGContextRef ctx, CGRect win, float radius, float band,
+                               const struct knit_chart* pattern);

@@ -1,8 +1,9 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #pragma once
 #include <mach/mach.h>
 #include <stdbool.h>
 
-#define BS_NAME "com.saragordic.window-sweaters"
+#define BS_NAME "local.windowfestival.ipc"
 
 struct mach_message {
   mach_msg_header_t header;

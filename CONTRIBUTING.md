@@ -6,10 +6,12 @@ Do not run live-window probes unattended: they create visible temporary windows.
 
 ## Compatibility contracts
 
-- Keep `CFBundleIdentifier` as **`local.knitborders.app`**. The previous
-  `local.knitborders` identity failed menu-bar hosting on the development Mac;
-  changing only the identity restored it. Do not revert it as part of a rename.
-- Preserve existing preferences and the legacy Application Support paths.
+- Window Festival uses **`local.windowfestival.app`**, separate IPC and
+  Application Support paths. Never migrate or overwrite Window Sweaters data
+  implicitly. See `docs/feasibility-assessment.md` for the identity map.
+- Upstream's `local.knitborders.app` fixed an observed menu-hosting issue on its
+  development Mac. This fork's identity still requires real menu acceptance;
+  automated menu construction alone does not establish hosting compatibility.
 - The default border width is 12 pt. A default change must not overwrite a user's
   saved selection. Keep the native menu and renderer defaults consistent.
 - AppKit UI, tracked-window state and geometry updates belong on the main thread.

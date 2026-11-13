@@ -88,6 +88,8 @@ static int reload_height;
 static uint32_t chart_pixels[KNIT_CHART_MAX][256];
 
 float knit_current_width(void) { return current_width; }
+static int library_opened;
+void knit_library_show(void (*apply)(const char*), void (*save)(void)) { assert(apply && save); library_opened++; }
 int knit_chart_index(const char* name) {
   for (int i = 0; i < g_chart_count; i++) if (!strcmp(name, g_charts[i].name)) return i;
   return -1;
@@ -161,7 +163,7 @@ static void test_listing(void) {
   KnitMenuApp* nameless = app_with(@"com.example.nameless", @"", YES);
   KnitMenuApp* anonymous = app_with(nil, @"Script", YES);                  // no identifier
   KnitMenuApp* second = app_with(@"com.apple.Safari", @"Safari", YES);     // another copy
-  KnitMenuApp* itself = app_with(@"local.knitborders.app", @"Window Sweaters", YES);
+  KnitMenuApp* itself = app_with(@"local.windowfestival.app", @"Window Festival", YES);
   NSArray* all = @[safari, raycast, agent, nameless, anonymous, second, itself];
   NSSet* owners = [NSSet setWithObjects:@(raycast.pid), nil];
 
@@ -285,12 +287,14 @@ int main(void) {
     NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Test"];
     menu.autoenablesItems = NO;
     [controller rebuild:menu];
-    NSArray* expected = @[@"Show Sweater Borders", @"Apps", @"Pattern", @"Border Width", @"Stitch Size",
-                         @"Inactive Windows", @"", @"Quit Window Sweaters"];
+    NSArray* expected = @[@"Show Sweater Borders", @"Apps", @"Pattern Library · 图案库…", @"Pattern", @"Border Width", @"Stitch Size",
+                         @"Inactive Windows", @"", @"Quit Window Festival"];
     assert(menu.numberOfItems == expected.count);
     for (NSInteger i = 0; i < menu.numberOfItems; i++)
       assert([[menu itemAtIndex:i].title isEqualToString:expected[i]]);
     check_actions(menu);
+    [controller openLibrary:[menu itemWithTitle:@"Pattern Library · 图案库…"]];
+    assert(library_opened == 1);
     NSMenu* patterns = submenu(menu, @"Pattern");
     assert(checked_count(patterns) == 1);
     assert(![patterns itemWithTitle:@"Stitch Style"] && ![patterns itemWithTitle:@"Awning"]);
@@ -419,6 +423,46 @@ int main(void) {
     [defaults.values removeObjectForKey:@"inactive"];
     [controller rebuild:menu];
 
+    // Festival charts use their own stitch grid without changing sweater gauge.
+    g_knit.rows = 8;
+    const char* motifs[] = {"festival-plum", "festival-lantern", "festival-spring", "festival-daisy", "festival-bamboo", "festival-tulip", "festival-cloud", "festival-diamond", "festival-persimmon"};
+    NSArray* motifTitles = @[@"Plum Blossom · 梅花", @"Lantern · 灯笼", @"Spring · 春", @"Daisy · 雏菊", @"Bamboo · 竹叶", @"Tulip · 郁金香", @"Cloud · 祥云", @"Diamond · 菱花", @"Persimmon · 柿子"];
+    for (int i = 0; i < 9; i++) {
+      int chart = knit_chart_index(motifs[i]);
+      g_charts[chart].upright = true;
+      g_charts[chart].h = i ? 14 : 12;
+      g_charts[chart].px = chart_pixels[chart];
+      [controller rebuild:menu];
+      [controller apply:[submenu(menu, @"Pattern") itemWithTitle:motifTitles[i]]];
+      assert(!g_knit_pattern_by_app && g_chart_active == chart && g_knit.rows == 8);
+      [controller rebuild:menu];
+      assert(![menu itemWithTitle:@"Stitch Size"].enabled);
+      assert(checked_count(submenu(menu, @"Pattern")) == 1);
+      knit_load_prefs();
+      assert(g_chart_active == chart && g_knit.rows == 8);
+    }
+    [defaults setObject:@"spring-festival" forKey:@"theme"];
+    knit_load_prefs();
+    assert(g_chart_active == knit_chart_index("festival-lantern"));
+    assert([defaults.values[@"theme"] isEqualToString:@"patterns"]);
+    NSMenuItem* byApp = [NSMenuItem new]; byApp.representedObject = @"chart=by-app";
+    [controller apply:byApp];
+    [controller rebuild:menu];
+    knit_load_prefs();
+    assert(g_knit_pattern_by_app && g_knit.rows == 8);
+    assert([menu itemWithTitle:@"Stitch Size"].enabled);
+    puts("PASS: knitted motifs persist; sweater gauge preserved; old theme migrates once; By App restores");
+
+    int portable = add_chart("user-example",14);
+    g_charts[portable].upright = g_charts[portable].packaged = true;
+    g_charts[portable].preferred_width = 22;
+    snprintf(g_charts[portable].title,sizeof g_charts[portable].title,"晨雾雏菊");
+    [controller rebuild:menu];
+    [controller apply:[submenu(submenu(menu,@"Pattern"),@"Custom Patterns") itemWithTitle:@"晨雾雏菊"]];
+    assert(g_chart_active == portable && current_width == 22 && g_knit.rows == 8);
+    knit_load_prefs();
+    assert(g_chart_active == portable && current_width == 22);
+    puts("PASS: package display name, preferred width, selection and restart preferences");
     puts("PASS: native menu structure, truthful state, working selections, chart filtering, gauge limits, cached swatches");
   }
   return 0;

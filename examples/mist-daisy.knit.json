@@ -1,0 +1,29 @@
+{
+  "baseColor" : "#465F67",
+  "grid" : [
+    "..............",
+    "......a.......",
+    "....aaaaa.....",
+    "...aaaaaaa....",
+    "...aabbbaa....",
+    "..aaabbbaaa...",
+    "...aabbbaa....",
+    "...aaaaaaa....",
+    "....aaaaa.....",
+    "......a.c.....",
+    "....ccccc.....",
+    ".....cc.......",
+    "......c.......",
+    ".............."
+  ],
+  "kind" : "window-festival-pattern",
+  "palette" : [
+    "#F4EBD6",
+    "#E9B95C",
+    "#8AA98A"
+  ],
+  "spacing" : 1.25,
+  "title" : "晨雾雏菊",
+  "version" : 1,
+  "width" : 28
+}

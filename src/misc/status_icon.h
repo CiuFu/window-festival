@@ -1,3 +1,4 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #pragma once
 #import <Cocoa/Cocoa.h>
 
@@ -45,6 +46,6 @@ static NSImage* knit_status_icon(void) {
       return YES;
     }];
   image.template = YES;
-  image.accessibilityDescription = @"Window Sweaters";
+  image.accessibilityDescription = @"Window Festival";
   return image;
 }

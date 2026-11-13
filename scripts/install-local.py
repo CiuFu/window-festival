@@ -9,11 +9,10 @@ import tempfile
 import time
 
 root = Path(__file__).resolve().parents[1]
-source = root / 'outputs/Window Sweaters.app'
+source = root / 'outputs/Window Festival.app'
 apps = Path.home() / 'Applications'
 destination = apps / source.name
-legacy = apps / 'Knit Borders.app'
-identifier = 'local.knitborders.app'
+identifier = 'local.windowfestival.app'
 
 def info(app):
     return plistlib.loads((app / 'Contents/Info.plist').read_bytes())
@@ -22,18 +21,16 @@ if not source.exists():
     raise SystemExit('Build first: ./scripts/build-app.sh')
 assert info(source)['CFBundleIdentifier'] == identifier
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(source)], check=True)
-existing = [p for p in (destination, legacy) if p.exists()]
+existing = [p for p in (destination,) if p.exists()]
 for app in existing:
     if info(app).get('CFBundleIdentifier') != identifier:
         raise SystemExit(f'Refusing to replace an unrelated app: {app}')
 
 # Archive before replacing; never include user preferences in an installation.
-backup = Path(tempfile.mkdtemp(prefix='window-sweaters-install-'))
+backup = Path(tempfile.mkdtemp(prefix='window-festival-install-'))
 for app in existing:
     subprocess.run(['ditto', '-c', '-k', '--keepParent', str(app), str(backup / (app.name + '.zip'))], check=True)
 executables = {str(p / 'Contents/MacOS' / info(p)['CFBundleExecutable']) for p in existing + [source]}
-# A previously installed copy may run from this repository's build folder.
-executables.add(str(root / 'outputs/Knit Borders.app/Contents/MacOS/KnitBorders'))
 
 def running():
     lines = subprocess.check_output(['ps', '-axo', 'pid=,comm='], text=True).splitlines()

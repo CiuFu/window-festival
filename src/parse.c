@@ -1,3 +1,4 @@
+// Modified for Window Festival, 2026-11-13; see NOTICE.md and docs/implementation-report.md.
 #include "parse.h"
 #include "misc/knit.h"
 #include "misc/chart.h"
@@ -57,7 +58,7 @@ static bool parse_color(struct color_style* style, char* token) {
     style->gradient.direction = TR_TO_BL;
     return true;
   }
-  else printf("[?] Window Sweaters: Invalid color argument color%s\n", token);
+  else printf("[?] Window Festival: Invalid color argument color%s\n", token);
 
   return false;
 }
@@ -73,7 +74,13 @@ uint32_t parse_settings(struct settings* settings, int count, char** arguments) 
   char order = 'a';
   uint32_t update_mask = 0;
   for (int i = 0; i < count; i++) {
-    if (str_starts_with(arguments[i], active_color)) {
+    if (str_starts_with(arguments[i], "theme=")) {
+      // Compatibility with the prototype's saved launch commands.
+      knit_pattern_select(!strcmp(arguments[i] + 6, "spring-festival") ? "festival-lantern" : "by-app");
+      knit_flush_cache();
+      update_mask |= BORDER_UPDATE_MASK_ALL;
+    }
+    else if (str_starts_with(arguments[i], active_color)) {
       if (parse_color(&settings->active_window,
                                  arguments[i] + strlen(active_color))) {
         update_mask |= BORDER_UPDATE_MASK_ACTIVE;
@@ -140,7 +147,7 @@ uint32_t parse_settings(struct settings* settings, int count, char** arguments) 
         knit_flush_cache();
         update_mask |= BORDER_UPDATE_MASK_ALL;
       } else {
-        printf("[?] Window Sweaters: Unknown pattern '%s'\n", n);
+        printf("[?] Window Festival: Unknown pattern '%s'\n", n);
       }
     }
     else if (strcmp(arguments[i], "apps=reload") == 0) {
@@ -235,7 +242,7 @@ uint32_t parse_settings(struct settings* settings, int count, char** arguments) 
     }
     else if (strncmp(arguments[i], "--", 2) == 0) { /* our own flags */ }
     else {
-      printf("[?] Window Sweaters: Invalid argument '%s'\n", arguments[i]);
+      printf("[?] Window Festival: Invalid argument '%s'\n", arguments[i]);
     }
   }
   return update_mask;

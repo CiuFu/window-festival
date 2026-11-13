@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>          <string>en</string>
-    <key>CFBundleDisplayName</key>                <string>Window Sweaters</string>
-    <key>CFBundleExecutable</key>                 <string>WindowSweaters</string>
-    <key>CFBundleIdentifier</key>                 <string>local.knitborders.app</string>
+    <key>CFBundleDisplayName</key>                <string>Window Festival</string>
+    <key>CFBundleExecutable</key>                 <string>WindowFestival</string>
+    <key>CFBundleIdentifier</key>                 <string>local.windowfestival.app</string>
     <key>CFBundleIconFile</key>                   <string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key>      <string>6.0</string>
-    <key>CFBundleName</key>                       <string>Window Sweaters</string>
+    <key>CFBundleName</key>                       <string>Window Festival</string>
     <key>CFBundlePackageType</key>                <string>APPL</string>
-    <key>CFBundleShortVersionString</key>         <string>1.5.0</string>
-    <key>CFBundleVersion</key>                    <string>45</string>
+    <key>CFBundleShortVersionString</key>         <string>0.1.0</string>
+    <key>CFBundleVersion</key>                    <string>1</string>
     <key>LSMinimumSystemVersion</key>             <string>13.0</string>
     <key>LSMultipleInstancesProhibited</key>      <true/>
     <key>LSUIElement</key>                        <true/>
